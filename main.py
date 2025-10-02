@@ -2,125 +2,145 @@ import pygame
 from sys import exit
 
 pygame.init()
+
 WIDTH, HEIGHT = 600, 600
-N = 8  
-CAMP = 4 
+N = 8
+CAMP = 4
 EMPTY, P1, P2 = 0, 1, 2
 
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Ugolki - Software Development Project - Do Minh Tuong")
-clock = pygame.time.Clock()
+SQUARE = WIDTH // N
 
-# Board and Pieces set up
-try:
-    board_img = pygame.image.load("Board.png").convert_alpha()
-    wp_img = pygame.image.load("WP.png").convert_alpha()
-    bp_img = pygame.image.load("BP.png").convert_alpha()
-    icon_img = pygame.image.load("BP.png").convert_alpha()
-    pygame.display.set_icon(icon_img)
-except pygame.error as e:
-    print(f"Error loading board image: {e}")
-    pygame.quit()
-    exit()
+class Piece:
+    def __init__(self, player):
+        self.player = player
 
-# Scale
-board_img = pygame.transform.smoothscale(board_img, (WIDTH, HEIGHT))
-SQUARE = WIDTH // 8
+class Board:
+    """board state and related logic"""
+    def __init__(self):
+        self.grid = [[EMPTY for _ in range(N)] for _ in range(N)]
+        # P1's pieces in the bottom left corner
+        for row in range(N - CAMP + 1, N):
+            for col in range(CAMP):
+                self.grid[row][col] = P1
+        # P 2's pieces in the top-right corner
+        for row in range(CAMP - 1):
+            for col in range(N - CAMP, N):
+                self.grid[row][col] = P2
 
-scale_factor = 0.75
-piece_size = int(SQUARE * scale_factor)
-offset = (SQUARE - piece_size) // 2
+    def get(self, row, col):
+        """value at a specific board position"""
+        return self.grid[row][col]
 
-wp_img = pygame.transform.smoothscale(wp_img, (piece_size, piece_size))
-bp_img = pygame.transform.smoothscale(bp_img, (piece_size, piece_size))
+    def set(self, row, col, value):
+        """set the value at a specific board position"""
+        self.grid[row][col] = value
 
+    def is_empty(self, row, col):
+        """a board position is empty or not"""
+        return self.grid[row][col] == EMPTY
 
-board = [[EMPTY for _ in range(N)] for _ in range(N)]
+    def is_adjacent(self, src, dst):
+        """check if two positions are adjacent"""
+        sr, sc = src
+        dr, dc = dst
+        return (abs(sr - dr) == 1 and sc == dc) or (abs(sc - dc) == 1 and sr == dr)
 
-# P1 left corner
-for row in range(N - CAMP + 1, N):
-    for col in range(CAMP): 
-        board[row][col] = P1
-        
-# P2 right corner
-for row in range(CAMP - 1):
-    for col in range(N - CAMP , N):
-        board[row][col] = P2
-
-selected_piece = None
-current_player = P1  
-
-def is_adjacent(selected_piece, target_piece):
-    selected_row, selected_col = selected_piece
-    target_row, target_col = target_piece
-    return (abs(selected_row - target_row) == 1 and selected_col == target_col) or \
-           (abs(selected_col - target_col) == 1 and selected_row == target_row)
-
-def get_valid_moves(selected_piece):
-    moves = []
-    if not selected_piece:
+    def get_valid_moves(self, pos):
+        """list of valid moves for a piece at the given position"""
+        moves = []
+        if not pos:
+            return moves
+        row, col = pos
+        # check all four directions
+        for dr, dc in [(-1,0), (1,0), (0,-1), (0,1)]:
+            nr, nc = row + dr, col + dc
+            if 0 <= nr < N and 0 <= nc < N and self.is_empty(nr, nc):
+                moves.append((nr, nc))
         return moves
-    row, col = selected_piece
-    for dr, dc in [(-1,0), (1,0), (0,-1), (0,1)]:
-        new_row, new_col = row + dr, col + dc
-        if 0 <= new_row < N and 0 <= new_col < N:
-            if board[new_row][new_col] == EMPTY:
-                moves.append((new_row, new_col))
-    return moves
 
-# Main loop
-while True:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
+class Game:
+    """Manages the game logic and user interface."""
+    def __init__(self):
+        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
+        pygame.display.set_caption("Ugolki - Software Development Project - Do Minh Tuong")
+        self.clock = pygame.time.Clock()
+        self.load_assets()
+        self.board = Board()
+        self.selected_piece = None
+        self.current_player = P1
+
+    def load_assets(self):
+        """load images for the board and piece"""
+        try:
+            self.board_img = pygame.image.load("Board.png").convert_alpha()
+            self.wp_img = pygame.image.load("WP.png").convert_alpha()
+            self.bp_img = pygame.image.load("BP.png").convert_alpha()
+            icon_img = pygame.image.load("BP.png").convert_alpha()
+            pygame.display.set_icon(icon_img)
+        except pygame.error as e:
+            print(f"Error loading image: {e}")
             pygame.quit()
             exit()
-        elif event.type == pygame.MOUSEBUTTONDOWN:
-            mouse_x, mouse_y = pygame.mouse.get_pos()
-            col, row = mouse_x // SQUARE, mouse_y // SQUARE
-            # Check if the square is clicked
-            if selected_piece is None and board[row][col] == current_player:
-                selected_piece = (row, col)
-            # Click again to deselect
-            elif selected_piece == (row, col):
-                selected_piece = None
-            # Move the piece to nearby empty
-            elif selected_piece:
-                if board[row][col] == EMPTY and is_adjacent(selected_piece, (row, col)):
-                    selected_row, selected_col = selected_piece
-                    board[row][col] = board[selected_row][selected_col]
-                    board[selected_row][selected_col] = EMPTY
-                    selected_piece = None
-                    # Change player
-                    current_player = P2 if current_player == P1 else P1
-    
-    # Draw the board
-    screen.blit(board_img, (0, 0))
-    
-    # Draw the pieces
-    for row in range(N):
-        for col in range(N):
-            if board[row][col] == P1:
-                screen.blit(wp_img, (col * SQUARE + offset, row * SQUARE + offset))
-            elif board[row][col] == P2:
-                screen.blit(bp_img, (col * SQUARE + offset, row * SQUARE + offset))
+        # scale 
+        self.board_img = pygame.transform.smoothscale(self.board_img, (WIDTH, HEIGHT))
+        scale_factor = 0.75
+        piece_size = int(SQUARE * scale_factor)
+        self.offset = (SQUARE - piece_size) // 2
+        self.wp_img = pygame.transform.smoothscale(self.wp_img, (piece_size, piece_size))
+        self.bp_img = pygame.transform.smoothscale(self.bp_img, (piece_size, piece_size))
 
-    # Highlight valid moves
-    if selected_piece:
-        for move_row, move_col in get_valid_moves(selected_piece):
-            pygame.draw.rect(
-                screen,
-                (0, 255, 0),  
-                (move_col * SQUARE, move_row * SQUARE, SQUARE, SQUARE),
-                5
-            )
+    def handle_mouse(self, pos):
+        """mouse click events for selecting and moving"""
+        col, row = pos[0] // SQUARE, pos[1] // SQUARE
+        if self.selected_piece is None and self.board.get(row, col) == self.current_player:
+            self.selected_piece = (row, col)
+        elif self.selected_piece == (row, col):
+            self.selected_piece = None
+        elif self.selected_piece:
+            if self.board.get(row, col) == EMPTY and self.board.is_adjacent(self.selected_piece, (row, col)):
+                sr, sc = self.selected_piece
+                # move 
+                self.board.set(row, col, self.board.get(sr, sc))
+                self.board.set(sr, sc, EMPTY)
+                self.selected_piece = None
+                # switch player's turn
+                self.current_player = P2 if self.current_player == P1 else P1
 
-    # Highlight selected piece
-    if selected_piece:
-        sel_row, sel_col = selected_piece
-        pygame.draw.rect(screen, (255, 255, 0), (sel_col * SQUARE, sel_row * SQUARE, SQUARE, SQUARE), 5)
+    def draw(self):
+        """draw the board, pieces, and highlight"""
+        self.screen.blit(self.board_img, (0, 0))
+        for row in range(N):
+            for col in range(N):
+                val = self.board.get(row, col)
+                if val == P1:
+                    self.screen.blit(self.wp_img, (col * SQUARE + self.offset, row * SQUARE + self.offset))
+                elif val == P2:
+                    self.screen.blit(self.bp_img, (col * SQUARE + self.offset, row * SQUARE + self.offset))
+        # highlight its valid moves 
+        if self.selected_piece:
+            for move_row, move_col in self.board.get_valid_moves(self.selected_piece):
+                pygame.draw.rect(
+                    self.screen,
+                    (0, 255, 0),  
+                    (move_col * SQUARE, move_row * SQUARE, SQUARE, SQUARE),
+                    5
+                )
+        #highlight the selected piece 
+        if self.selected_piece:
+            sel_row, sel_col = self.selected_piece
+            pygame.draw.rect(self.screen, (255, 255, 0), (sel_col * SQUARE, sel_row * SQUARE, SQUARE, SQUARE), 5)
 
-    pygame.display.update()
-    clock.tick(60)
+    def run(self):
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    exit()
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    self.handle_mouse(pygame.mouse.get_pos())
+            self.draw()
+            pygame.display.update()
+            self.clock.tick(60)
 
-
-    #them dong nay vao de test github
+if __name__ == "__main__":
+    Game().run()
