@@ -26,3 +26,38 @@ For each moves, the algorithm must check:
 + Players take turn everytime, except for the continuos jump
 Winning condition:2D matrix from col 5 (index 4) to col 8 (index 7), row 1 (index 0) to row 3 (index 2) marked as 1 or the opposite marked as 2
 
+- UML-style box format (Still updating..)
+* Piece : repersents a game piece
+    +) player : int
+    -------------------
+    +) piece(player:int)
+
+* Board : manage all the state of the board (position of pieces, valid moves,..)
+    +) grid : list[list[int]]
+    -------------------
+    +) board()
+    +) get(row:int, col:int) : int
+    +) set(row:int, col:int, value:int) : void
+    +) is_empty(row:int, col:int) : bool
+    +) is_adjacent(src:tuple, dst:tuple) : bool
+    +) get_valid_moves(pos:tuple) : list[tuple]
+    +) is_target_camp_filled(player:int) : bool
+
+* Game : control the game loop, drawing everything you see, input and turns and check the winner
+    +) screen : pygame.Surface
+    +) clock : pygame.time.Clock
+    +) board : Board
+    +) selected_piece : tuple[int,int] or None
+    +) current_player : int
+    +) winner : int or None
+    +) font : pygame.font.Font
+    +) board_img : pygame.Surface
+    +) wp_img : pygame.Surface
+    +) bp_img : pygame.Surface
+    +) offset : int
+    --------------------
+    +) game()
+    +) load_assets() : void
+    +) handle_mouse(pos:tuple[int,int]) : void
+    +) draw() : void
+    +) run() : void
