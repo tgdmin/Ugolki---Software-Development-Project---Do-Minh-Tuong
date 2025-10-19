@@ -9,6 +9,14 @@ CAMP = 4
 EMPTY, P1, P2 = 0, 1, 2
 
 SQUARE = WIDTH // N
+P1_START_ROWS = range(N - CAMP + 1, N)
+P1_START_COLS = range(CAMP)
+P2_START_ROWS = range(CAMP - 1)
+P2_START_COLS = range(N - CAMP, N)
+PLAYER_TARGETS = {
+    P1: (P2_START_ROWS, P2_START_COLS),
+    P2: (P1_START_ROWS, P1_START_COLS),
+}
 
 class Piece:
     def __init__(self, player):
@@ -19,12 +27,12 @@ class Board:
     def __init__(self):
         self.grid = [[EMPTY for _ in range(N)] for _ in range(N)]
         # P1's pieces in the bottom left corner
-        for row in range(N - CAMP + 1, N):
-            for col in range(CAMP):
+        for row in P1_START_ROWS:
+            for col in P1_START_COLS:
                 self.grid[row][col] = P1
         # P 2's pieces in the top-right corner
-        for row in range(CAMP - 1):
-            for col in range(N - CAMP, N):
+        for row in P2_START_ROWS:
+            for col in P2_START_COLS:
                 self.grid[row][col] = P2
 
     def get(self, row, col):
@@ -58,6 +66,11 @@ class Board:
                 moves.append((nr, nc))
         return moves
 
+    def is_target_camp_filled(self, player):
+        """check if the destination camp is fully occupied by the player"""
+        rows, cols = PLAYER_TARGETS[player]
+        return all(self.get(r, c) == player for r in rows for c in cols)
+
 class Game:
     """Manages the game logic and user interface."""
     def __init__(self):
@@ -68,6 +81,8 @@ class Game:
         self.board = Board()
         self.selected_piece = None
         self.current_player = P1
+        self.winner = None
+        self.font = pygame.font.SysFont(None, 48)
 
     def load_assets(self):
         """load images for the board and piece"""
@@ -91,6 +106,8 @@ class Game:
 
     def handle_mouse(self, pos):
         """mouse click events for selecting and moving"""
+        if self.winner:
+            return
         col, row = pos[0] // SQUARE, pos[1] // SQUARE
         if self.selected_piece is None and self.board.get(row, col) == self.current_player:
             self.selected_piece = (row, col)
@@ -103,8 +120,12 @@ class Game:
                 self.board.set(row, col, self.board.get(sr, sc))
                 self.board.set(sr, sc, EMPTY)
                 self.selected_piece = None
-                # switch player's turn
-                self.current_player = P2 if self.current_player == P1 else P1
+                # check for a winner before switching player
+                if self.board.is_target_camp_filled(self.current_player):
+                    self.winner = self.current_player
+                else:
+                    # switch player's turn
+                    self.current_player = P2 if self.current_player == P1 else P1
 
     def draw(self):
         """draw the board, pieces, and highlight"""
@@ -129,6 +150,13 @@ class Game:
         if self.selected_piece:
             sel_row, sel_col = self.selected_piece
             pygame.draw.rect(self.screen, (255, 255, 0), (sel_col * SQUARE, sel_row * SQUARE, SQUARE, SQUARE), 5)
+        if self.winner:
+            message = "Player 1 wins!" if self.winner == P1 else "Player 2 wins!"
+            text_surface = self.font.render(message, True, (255, 255, 255))
+            text_rect = text_surface.get_rect(center=(WIDTH // 2, HEIGHT // 2))
+            background_rect = text_rect.inflate(20, 20)
+            pygame.draw.rect(self.screen, (0, 0, 0), background_rect)
+            self.screen.blit(text_surface, text_rect)
 
     def run(self):
         while True:
