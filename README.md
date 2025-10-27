@@ -28,7 +28,7 @@ Winning condition:2D matrix from col 5 (index 4) to col 8 (index 7), row 1 (inde
 ---------------
 * UML-style box format (Still updating..)
 - Piece : repersents a game piece
-    + player : int
+    + player : int // 0, 1, 2
     + piece(player:int)
 
 - Board : manage all the state of the board (position of pieces, valid moves,..)
