@@ -13,20 +13,6 @@ The game ends when both players have no available moves left. Game pieces are co
 Board.png - The graphic of the board
 WP.png - Player 1 pieces
 BP.png - Player 2 pieces
----------------
-* Project Structure:
-ugolki/
-├── main.py            # Entry point: connects Start Menu → Game
-├── start_menu.py      # Start screen, mode select (Vs P2 / Vs Bot), rules overlay
-├── game.py            # Gameplay loop, rendering, input, highlights, bot
-├── board.py           # Board engine: grid, move validation, DFS jump chain, win-check
-├── settings.py        # Global constants (sizes, assets, rules)
-├── assets/
-│   ├── Board.png
-│   ├── WP.png
-│   ├── BP.png
-│   └── logo.png       # optional
-└── README.md
 ----------------
 * Ideas:
 The board is basically a 2D matrix 8x8, index from 0 to 7 where all boxes are marked EMPTY
@@ -77,7 +63,7 @@ When the player (or bot) actually jumps, we recompute valid jumps from the new p
 
 Result: highlight shows only valid next jumps at every step.
 ----------------
-*Camp Rule (Toggleable)
+* Camp Rule (Toggleable)
 
 In Start Menu, you’ll see a toggle: “Camp rule: ON/OFF”.
 
