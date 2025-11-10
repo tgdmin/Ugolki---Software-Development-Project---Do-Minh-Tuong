@@ -10,9 +10,9 @@ the destination square can be reached by consecutive "jumps" over other game pie
 The game ends when both players have no available moves left. Game pieces are counted within the square bounds of the final formation, and the player with more pieces wins.
 ---------------
 * Materials:
-Board.png - The graphic of the board
-WP.png - Player 1 pieces
-BP.png - Player 2 pieces
+    + Board.png : The graphic of the board
+    + WP.png : Player 1 pieces
+    + BP.png : Player 2 pieces
 ----------------
 * Ideas:
 The board is basically a 2D matrix 8x8, index from 0 to 7 where all boxes are marked EMPTY
