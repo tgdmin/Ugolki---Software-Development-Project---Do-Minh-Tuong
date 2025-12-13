@@ -102,10 +102,12 @@ class Game:
             return
 
         # collect P2 pieces 
-        pieces: List[Pos] = [(r, c)
-                             for r in range(len(self.board.grid))
-                             for c in range(len(self.board.grid[r]))
-                             if self.board.get(r, c) == P2]
+        pieces: List[Pos] = [
+            (row, col)
+            for row in range(len(self.board.grid))
+            for col in range(len(self.board.grid[row]))
+            if self.board.get(row, col) == P2
+        ]
         random.shuffle(pieces)
 
         # try jump first (take the first chain we can)
@@ -126,10 +128,10 @@ class Game:
                 return
 
     def _bot_move_piece(self, src: Pos, dst: Pos):
-        sr, sc = src
-        dr, dc = dst
-        self.board.set(dr, dc, self.board.get(sr, sc))
-        self.board.set(sr, sc, EMPTY)
+        src_row, src_col = src
+        dst_row, dst_col = dst
+        self.board.set(dst_row, dst_col, self.board.get(src_row, src_col))
+        self.board.set(src_row, src_col, EMPTY)
 
     def _bot_play_jump_chain(self, start: Pos, first_dst: Pos):
         self._bot_move_piece(start, first_dst)
@@ -189,15 +191,15 @@ class Game:
             if (row, col) not in valid:
                 return None
 
-            sr, sc = self.selected
-            self.board.set(row, col, self.board.get(sr, sc))
-            self.board.set(sr, sc, EMPTY)
+            sel_row, sel_col = self.selected
+            self.board.set(row, col, self.board.get(sel_row, sel_col))
+            self.board.set(sel_row, sel_col, EMPTY)
             self.selected = (row, col)
 
-            is_jump = abs(sr - row) + abs(sc - col) == 2
+            is_jump = abs(sel_row - row) + abs(sel_col - col) == 2
             if is_jump:
                 self.jump_mode = True
-                self.visited_in_chain.add((sr, sc))
+                self.visited_in_chain.add((sel_row, sel_col))
                 self.visited_in_chain.add((row, col))
 
                 more = self.board.get_valid_moves(
@@ -234,20 +236,20 @@ class Game:
     def draw(self):
         self.screen.blit(self.board_img, (0, 0))
 
-        for r in range(len(self.board.grid)):
-            for c in range(len(self.board.grid[r])):
-                v = self.board.get(r, c)
+        for row in range(len(self.board.grid)):
+            for col in range(len(self.board.grid[row])):
+                v = self.board.get(row, col)
                 if v == P1:
-                    self.screen.blit(self.wp_img, (c * SQUARE + self.offset, r * SQUARE + self.offset))
+                    self.screen.blit(self.wp_img, (col * SQUARE + self.offset, row * SQUARE + self.offset))
                 elif v == P2:
-                    self.screen.blit(self.bp_img, (c * SQUARE + self.offset, r * SQUARE + self.offset))
+                    self.screen.blit(self.bp_img, (col * SQUARE + self.offset, row * SQUARE + self.offset))
 
         # highlights for the human turn
         if self.selected and not self.winner and (not self.vs_bot or self.current_player == P1):
-            for mr, mc in self._valid_moves_for_selected():
-                pygame.draw.rect(self.screen, (0, 255, 0), (mc * SQUARE, mr * SQUARE, SQUARE, SQUARE), 5)
-            sr, sc = self.selected
-            pygame.draw.rect(self.screen, (255, 255, 0), (sc * SQUARE, sr * SQUARE, SQUARE, SQUARE), 5)
+            for move_row, move_col in self._valid_moves_for_selected():
+                pygame.draw.rect(self.screen, (0, 255, 0), (move_col * SQUARE, move_row * SQUARE, SQUARE, SQUARE), 5)
+            sel_row, sel_col = self.selected
+            pygame.draw.rect(self.screen, (255, 255, 0), (sel_col * SQUARE, sel_row * SQUARE, SQUARE, SQUARE), 5)
             if self.jump_mode:
                 hint = self.hint_font.render("Right-click current piece to stop jumping", True, (255, 255, 255))
                 bg = hint.get_rect()

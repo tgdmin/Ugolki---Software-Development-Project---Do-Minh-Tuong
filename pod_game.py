@@ -1,8 +1,8 @@
 # pod_game.py
 from typing import Optional, Tuple, Set, List
-import random
 import pygame
 from pod_board import PodBoard, Pos
+from pod_bot import PodBot
 from settings import (
     WIDTH,
     HEIGHT,
@@ -27,11 +27,12 @@ class PodGame:
 
         self.vs_bot = vs_bot
         self.board = PodBoard()
+        self.bot = PodBot()
         self.selected: Optional[Pos] = None
         self.current_player = P1
         self.winner: Optional[int] = None
 
-        # trạng thái chuỗi ăn
+        # capture-chain state
         self.jump_mode = False
         self.captured_in_chain: Set[Pos] = set()
 
@@ -67,13 +68,13 @@ class PodGame:
 
     def _valid_moves_for_selected(self) -> List[Pos]:
         """
-        Bắt buộc ăn theo QUÂN:
+        Capture requirement is evaluated per piece:
 
-        - Nếu đang ở giữa chain (jump_mode=True) thì luôn phải ăn tiếp nếu còn.
-        - Nếu chưa ở trong chain:
-            + Check xem QUÂN ĐANG CHỌN có capture không.
-            + Nếu có -> force_captures=True cho quân này.
-            + Nếu không -> đi simple moves bình thường.
+        - If already inside a capture chain (jump_mode=True) the piece must keep capturing.
+        - If not yet in a chain:
+            + Check whether the selected piece currently has captures.
+            + If it does, force captures for that specific piece.
+            + Otherwise allow ordinary simple moves.
         """
         if not self.selected:
             return []
@@ -94,7 +95,7 @@ class PodGame:
         )
 
     def _end_turn(self):
-        # sau khi kết thúc chuỗi ăn, remove các quân bị ăn
+        # after finishing a capture chain remove all captured pieces
         for pos in self.captured_in_chain:
             self.board.remove_piece(pos)
 
@@ -102,133 +103,25 @@ class PodGame:
         self.captured_in_chain.clear()
         self.selected = None
 
-        # đổi lượt
+        # switch players
         self.current_player = P2 if self.current_player == P1 else P1
 
-        # Poddavki: player WIN nếu chính player đó không còn move nào
+        # Poddavki: a player wins if they themselves have no legal moves left
         if not self.board.has_any_move(self.current_player):
             self.winner = self.current_player
-
-    # ---------- BOT logic (P2) ----------
-    def _bot_take_turn(self):
-        """
-        Bot rất đơn giản:
-        - Nếu P2 không còn nước đi -> P2 thắng ngay (theo luật).
-        - Nếu có nước ăn:
-            + Chọn ngẫu nhiên một nước ăn (src, dst),
-              sau đó chơi full chuỗi multi-jump cho quân đó.
-        - Nếu không có nước ăn:
-            + Tìm các simple moves.
-            + Ưu tiên nước đi tiến (tăng row) nếu có, rồi random.
-        """
-        if self.winner:
-            return
-        if self.current_player != P2:
-            return
-
-        # nếu P2 không còn move P2 thắng luôn
-        if not self.board.has_any_move(P2):
-            self.winner = P2
-            return
-
-        capture_options: List[Tuple[Pos, Pos]] = []
-        simple_options: List[Tuple[Pos, Pos]] = []
-        forward_options: List[Tuple[Pos, Pos]] = []
-
-        # duyệt các quân của P2
-        for r in range(len(self.board.grid)):
-            for c in range(len(self.board.grid[r])):
-                if self.board.get(r, c) == P2:
-                    pos = (r, c)
-                    caps = self.board._captures_from(P2, pos, set())
-                    if caps:
-                        for dst in caps:
-                            capture_options.append((pos, dst))
-                    else:
-                        moves = self.board._simple_moves_from(P2, pos)
-                        for dst in moves:
-                            simple_options.append((pos, dst))
-                            # ưu tiên move tiến (row tăng)
-                            if dst[0] > r:
-                                forward_options.append((pos, dst))
-
-        if capture_options:
-            src, dst = random.choice(capture_options)
-            self._bot_play_capture_chain(src, dst)
-            return
-
-        if simple_options:
-            if forward_options:
-                src, dst = random.choice(forward_options)
-            else:
-                src, dst = random.choice(simple_options)
-
-            # thực hiện simple move
-            was_king = self.board.is_king(src)
-            self.board.move_piece(src, dst)
-            if not was_king and self.board.in_kings_row(P2, dst[0]):
-                self.board.make_king(dst)
-
-            self.captured_in_chain = set()
-            self.jump_mode = False
-            self.selected = None
-            self._end_turn()
-            return
-
-        self.winner = P2
-
-    def _bot_play_capture_chain(self, src: Pos, first_dst: Pos):
-        """
-        Cho P2 chơi full chuỗi multi-jump bắt đầu từ src to first_dst.
-        """
-        captured: Set[Pos] = set()
-        cur = src
-        dst = first_dst
-
-        while True:
-            was_king = self.board.is_king(cur)
-            is_cap, enemy_pos = self.board.is_capture_move(P2, cur, dst, captured)
-            if not is_cap or enemy_pos is None:
-                break
-
-            # move
-            self.board.move_piece(cur, dst)
-            if not was_king and self.board.in_kings_row(P2, dst[0]):
-                self.board.make_king(dst)
-
-            captured.add(enemy_pos)
-
-            # tìm các capture tiếp theo cho quân này
-            more = self.board.get_valid_moves_for_piece(
-                P2,
-                dst,
-                force_captures=True,
-                captured_in_chain=captured,
-            )
-            if not more:
-                break
-
-            cur = dst
-            dst = random.choice(more)
-
-        # kết thúc lượt bot
-        self.captured_in_chain = captured
-        self.jump_mode = False
-        self.selected = None
-        self._end_turn()
 
     # ---------- input (human) ----------
     def _handle_left_click(self, pos):
         if self.winner:
-            # click bất kỳ sau khi thắng -> về menu
+            # any click after a win goes back to the menu
             return "menu"
 
         if self.vs_bot and self.current_player == P2:
-            return None  # đang là lượt bot, ignore click
+            return None  # ignore clicks during the bot's turn
 
         row, col = self._screen_to_grid(pos)
 
-        # CHỌN QUÂN
+        # SELECT PIECE
         if self.selected is None:
             if self.board.get(row, col) == self.current_player:
                 self.selected = (row, col)
@@ -236,7 +129,7 @@ class PodGame:
                 self.captured_in_chain.clear()
             return None
 
-        # click lại vào chính nó để bỏ chọn (nếu chưa ở trong chain)
+        # clicking the same piece again deselects it (only when not in a chain)
         if self.selected == (row, col) and not self.jump_mode:
             self.selected = None
             self.captured_in_chain.clear()
@@ -252,31 +145,31 @@ class PodGame:
             self.current_player, src, dest, self.captured_in_chain
         )
 
-        # di chuyển quân
+        # move the piece
         was_king = self.board.is_king(src)
         self.board.move_piece(src, dest)
         self.selected = dest
 
-        # phong Vua nếu cần (Man chạm hàng cuối)
+        # crown to King if a man reaches the last row
         if not was_king and self.board.in_kings_row(self.current_player, dest[0]):
             self.board.make_king(dest)
 
         if is_cap and enemy_pos is not None:
-            # đã ăn 1 quân thì vào chain
+            # once a piece captures it enters chain mode
             self.jump_mode = True
             self.captured_in_chain.add(enemy_pos)
 
-            # xem còn ăn tiếp được không
+            # check if further captures are available
             more = self.board.get_valid_moves_for_piece(
                 self.current_player,
                 self.selected,
-                force_captures=True,  # trong chain: còn là phải ăn
+                force_captures=True,  # while chaining, captures stay mandatory
                 captured_in_chain=self.captured_in_chain,
             )
             if not more:
                 self._end_turn()
         else:
-            # simple move: chỉ xảy ra khi quân này không có capture
+            # simple move occurs only when this piece has no capture
             self._end_turn()
 
         return None
@@ -304,24 +197,24 @@ class PodGame:
                         (c * SQUARE + self.offset, r * SQUARE + self.offset),
                     )
 
-        # highlight nước đi
+        # highlight valid moves
         if self.selected and not self.winner:
-            for (mr, mc) in self._valid_moves_for_selected():
+            for (move_row, move_col) in self._valid_moves_for_selected():
                 pygame.draw.rect(
                     self.screen,
                     (0, 255, 0),
-                    (mc * SQUARE, mr * SQUARE, SQUARE, SQUARE),
+                    (move_col * SQUARE, move_row * SQUARE, SQUARE, SQUARE),
                     5,
                 )
-            sr, sc = self.selected
+            sel_row, sel_col = self.selected
             pygame.draw.rect(
                 self.screen,
                 (255, 255, 0),
-                (sc * SQUARE, sr * SQUARE, SQUARE, SQUARE),
+                (sel_col * SQUARE, sel_row * SQUARE, SQUARE, SQUARE),
                 5,
             )
 
-            # hint: chỉ hiện nếu quân đang chọn có thể ăn hoặc đang ở trong chain
+            # hint shows only if the selected piece can capture or is mid-chain
             piece_caps_now = self.board._captures_from(
                 self.current_player, self.selected, set()
             )
@@ -367,9 +260,9 @@ class PodGame:
                     if res == "menu":
                         return "menu"
 
-            # cho bot chơi tự động khi tới lượt
+            # let the bot act automatically on its turn
             if self.vs_bot and not self.winner and self.current_player == P2:
-                self._bot_take_turn()
+                self.bot.take_turn(self)
 
             self.draw()
             pygame.display.update()

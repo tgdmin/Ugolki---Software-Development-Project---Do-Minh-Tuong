@@ -17,31 +17,32 @@ class Board(BaseBoard):
         super().__init__()
 
         # P1 bottom-left
-        for r in P1_START_ROWS:
-            for c in P1_START_COLS:
-                self.grid[r][c] = P1
+        for row in P1_START_ROWS:
+            for col in P1_START_COLS:
+                self.grid[row][col] = P1
 
         # P2 top-right
-        for r in P2_START_ROWS:
-            for c in P2_START_COLS:
-                self.grid[r][c] = P2
+        for row in P2_START_ROWS:
+            for col in P2_START_COLS:
+                self.grid[row][col] = P2
 
     # camps
     def _camp_cells(self, player) -> Set[Pos]:
         rows, cols = PLAYER_TARGETS[player]
-        return {(r, c) for r in rows for c in cols}
+        return {(row, col) for row in rows for col in cols}
 
-    def in_target_camp(self, player, r, c):
-        return (r, c) in self._camp_cells(player)
+    def in_target_camp(self, player, row, col):
+        return (row, col) in self._camp_cells(player)
 
     # 1-step moves
     def _step_moves(self, pos: Pos):
-        r, c = pos
+        row, col = pos
         out = []
-        for dr, dc in DIRS:
-            nr, nc = r + dr, c + dc
-            if self.in_bounds(nr, nc) and self.is_empty(nr, nc):
-                out.append((nr, nc))
+        for row_delta, col_delta in DIRS:
+            next_row = row + row_delta
+            next_col = col + col_delta
+            if self.in_bounds(next_row, next_col) and self.is_empty(next_row, next_col):
+                out.append((next_row, next_col))
         return out
 
     # multi-jump with live pruning
@@ -75,18 +76,20 @@ class Board(BaseBoard):
                 return
             seen_land.add(cur)
 
-            r, c = cur
-            for dr, dc in DIRS:
-                mr, mc = r + dr, c + dc      # middle (must have a piece)
-                lr, lc = r + 2*dr, c + 2*dc  # landing (must be empty)
-                if not self.in_bounds(lr, lc):
+            row, col = cur
+            for row_delta, col_delta in DIRS:
+                mid_row = row + row_delta
+                mid_col = col + col_delta      # middle (must have a piece)
+                landing_row = row + 2 * row_delta
+                landing_col = col + 2 * col_delta  # landing (must be empty)
+                if not self.in_bounds(landing_row, landing_col):
                     continue
-                if self.is_empty(mr, mc):
+                if self.is_empty(mid_row, mid_col):
                     continue
-                if not self.is_empty(lr, lc):
+                if not self.is_empty(landing_row, landing_col):
                     continue
 
-                landing = (lr, lc)
+                landing = (landing_row, landing_col)
 
                 # if we land into camp, then next moves must stay inside
                 next_must_stay = must_stay
@@ -119,9 +122,9 @@ class Board(BaseBoard):
         if not pos:
             return []
 
-        r, c = pos
+        row, col = pos
         # if piece is in camp at THIS moment, it can't move out (also for steps)
-        restrict_now = ENFORCE_CAMP_RULE and self.in_target_camp(player, r, c)
+        restrict_now = ENFORCE_CAMP_RULE and self.in_target_camp(player, row, col)
         camp_cells = self._camp_cells(player) if restrict_now else None
 
         # compute jumps fresh on current board, with live camp-stay handling

@@ -5,23 +5,23 @@ from settings import N, EMPTY, P1, P2
 
 
 def is_dark(r: int, c: int) -> bool:
-    """Ô đen (chỉ chơi trên ô đen)."""
+    """Dark squares (only these are playable)."""
     return (r + c) % 2 == 1
 
 
 class PodBoard(BaseBoard):
     """
-    Bàn cờ cho Poddavki / giveaway checkers :
-    - Man đi chéo lên phía trước 1 ô.
-    - Man ăn chéo lên phía trước 2 ô (không được ăn lùi).
-    - King đi chéo 1 ô (cả 4 hướng).
-    - King ăn như Man nhưng được ăn cả 4 hướng (cũng chỉ 2 ô, không bay).
+    Poddavki / giveaway checkers board:
+    - Men move one square diagonally forward.
+    - Men capture two squares diagonally forward (no backward capture).
+    - Kings move one square diagonally in any direction.
+    - Kings capture like men but in all four diagonal directions (still two-square jumps).
     """
 
     def __init__(self):
         super().__init__()
 
-        # Setup 3 hàng trên và 3 hàng dưới, chỉ trên ô đen
+        # Fill the top and bottom three rows, only on dark squares
         for r in range(3):  # top 3 rows: P2
             for c in range(N):
                 if is_dark(r, c):
@@ -32,10 +32,10 @@ class PodBoard(BaseBoard):
                 if is_dark(r, c):
                     self.grid[r][c] = P1
 
-        # King được lưu bằng set vị trí
+        # Kings are tracked via a set of positions
         self.kings: Set[Pos] = set()
 
-    # -------- tiện ích cơ bản --------
+    # -------- basic helpers --------
     def own(self, player: int, r: int, c: int) -> bool:
         return self.in_bounds(r, c) and self.get(r, c) == player
 
@@ -58,55 +58,57 @@ class PodBoard(BaseBoard):
             self.kings.remove(pos)
 
     def move_piece(self, src: Pos, dst: Pos):
-        sr, sc = src
-        dr, dc = dst
-        v = self.get(sr, sc)
-        self.set(dr, dc, v)
-        self.set(sr, sc, EMPTY)
+        src_row, src_col = src
+        dst_row, dst_col = dst
+        value = self.get(src_row, src_col)
+        self.set(dst_row, dst_col, value)
+        self.set(src_row, src_col, EMPTY)
         if src in self.kings:
             self.kings.remove(src)
             self.kings.add(dst)
 
     def forward_dir(self, player: int) -> int:
-        # P1 ở dưới đi lên (-1), P2 ở trên đi xuống (+1)
+        # P1 starts at bottom moving up (-1), P2 starts at top moving down (+1)
         return -1 if player == P1 else 1
 
     def in_kings_row(self, player: int, r: int) -> bool:
         return (player == P1 and r == 0) or (player == P2 and r == N - 1)
 
-    # -------- simple moves (không ăn) --------
+    # -------- simple moves (non-captures) --------
     def _simple_moves_from(self, player: int, pos: Pos) -> List[Pos]:
         """
-        Man: đi chéo lên phía trước 1 ô (không bao giờ đi lùi).
-        King: đi chéo 1 ô theo mọi hướng (không bay trong nước đi thường).
+        Men: move one square diagonally forward (never backward).
+        Kings: move one square diagonally in any direction (no flying moves).
         """
-        r, c = pos
-        if not self.own(player, r, c):
+        row, col = pos
+        if not self.own(player, row, col):
             return []
         moves: List[Pos] = []
 
         if self.is_king(pos):
-            # King: 1 ô chéo, 4 hướng
-            for dr in (-1, 1):
-                for dc in (-1, 1):
-                    nr, nc = r + dr, c + dc
-                    if self.in_bounds(nr, nc) and self.is_empty(nr, nc):
-                        moves.append((nr, nc))
+            # King: one diagonal step, four directions
+            for row_delta in (-1, 1):
+                for col_delta in (-1, 1):
+                    next_row = row + row_delta
+                    next_col = col + col_delta
+                    if self.in_bounds(next_row, next_col) and self.is_empty(next_row, next_col):
+                        moves.append((next_row, next_col))
         else:
-            # Man: chỉ đi lên phía trước 1 ô chéo
-            d = self.forward_dir(player)
-            for dc in (-1, 1):
-                nr, nc = r + d, c + dc
-                if self.in_bounds(nr, nc) and self.is_empty(nr, nc):
-                    moves.append((nr, nc))
+            # Man: one forward diagonal step only
+            forward_step = self.forward_dir(player)
+            for col_delta in (-1, 1):
+                next_row = row + forward_step
+                next_col = col + col_delta
+                if self.in_bounds(next_row, next_col) and self.is_empty(next_row, next_col):
+                    moves.append((next_row, next_col))
 
         return moves
 
-    # -------- captures từ 1 quân --------
+    # -------- captures from a single piece --------
     def _captures_from(self, player: int, pos: Pos, captured_in_chain: Set[Pos]) -> List[Pos]:
         """
-        Trả về danh sách ô đáp (landing) cho mọi nước ăn từ pos,
-        với danh sách quân đã ăn trong chain (captured_in_chain).
+        Return landing squares for every capture originating from pos,
+        respecting the set of already-captured pieces in the chain.
         """
         if not self.own(player, pos[0], pos[1]):
             return []
@@ -117,76 +119,80 @@ class PodBoard(BaseBoard):
 
     def _man_captures(self, player: int, pos: Pos, captured_in_chain: Set[Pos]) -> List[Pos]:
         """
-        Man CHỈ được ăn tiến:
-        - Nhảy chéo 2 ô về phía trước, qua đầu 1 quân địch, đáp tại ô trống sau nó.
+        Men capture only forward:
+        - Jump two squares diagonally forward over one enemy and land on the empty cell beyond.
         """
-        r, c = pos
+        row, col = pos
         res: List[Pos] = []
-        d = self.forward_dir(player)  # chỉ hướng tới (không ăn lùi)
+        forward_step = self.forward_dir(player)  # forward direction only (no backward capture)
 
-        for dc in (-1, 1):
-            mr, mc = r + d, c + dc
-            lr, lc = r + 2 * d, c + 2 * dc
-            if not self.in_bounds(lr, lc):
+        for col_delta in (-1, 1):
+            mid_row = row + forward_step
+            mid_col = col + col_delta
+            landing_row = row + 2 * forward_step
+            landing_col = col + 2 * col_delta
+            if not self.in_bounds(landing_row, landing_col):
                 continue
-            if not self.enemy(player, mr, mc):
+            if not self.enemy(player, mid_row, mid_col):
                 continue
-            if (mr, mc) in captured_in_chain:
+            if (mid_row, mid_col) in captured_in_chain:
                 continue
-            if not self.is_empty(lr, lc):
+            if not self.is_empty(landing_row, landing_col):
                 continue
-            res.append((lr, lc))
+            res.append((landing_row, landing_col))
 
         return res
 
     def _king_captures(self, player: int, pos: Pos, captured_in_chain: Set[Pos]) -> List[Pos]:
         """
-        King ăn GIỐNG Man nhưng được ăn cả 4 hướng:
-        - Nhảy đúng 2 ô chéo (không bay),
-        - Phải qua đúng 1 quân địch chưa bị ăn trước đó.
+        Kings capture like men but in all four directions:
+        - Jump exactly two diagonal squares (no flying),
+        - Must hop over exactly one enemy piece that has not been captured yet.
         """
-        r, c = pos
+        row, col = pos
         res: List[Pos] = []
 
-        for dr in (-1, 1):
-            for dc in (-1, 1):
-                mr, mc = r + dr, c + dc
-                lr, lc = r + 2 * dr, c + 2 * dc
+        for row_delta in (-1, 1):
+            for col_delta in (-1, 1):
+                mid_row = row + row_delta
+                mid_col = col + col_delta
+                landing_row = row + 2 * row_delta
+                landing_col = col + 2 * col_delta
 
-                if not self.in_bounds(lr, lc):
+                if not self.in_bounds(landing_row, landing_col):
                     continue
-                if not self.enemy(player, mr, mc):
+                if not self.enemy(player, mid_row, mid_col):
                     continue
-                if (mr, mc) in captured_in_chain:
+                if (mid_row, mid_col) in captured_in_chain:
                     continue
-                if not self.is_empty(lr, lc):
+                if not self.is_empty(landing_row, landing_col):
                     continue
 
-                res.append((lr, lc))
+                res.append((landing_row, landing_col))
 
         return res
 
-    # -------- helpers tổng quát --------
+    # -------- general helpers --------
     def has_any_capture(self, player: int) -> bool:
-        """Dùng để check còn nước ăn nào không (cho điều kiện thắng)."""
-        for r in range(N):
-            for c in range(N):
-                if self.own(player, r, c):
-                    if self._captures_from(player, (r, c), set()):
+        """Check whether any capture remains (used for win conditions)."""
+        for row in range(N):
+            for col in range(N):
+                if self.own(player, row, col):
+                    if self._captures_from(player, (row, col), set()):
                         return True
         return False
 
     def has_any_move(self, player: int) -> bool:
         """
-        Kiểm tra player còn nước đi hợp lệ nào không (ăn hoặc đi thường).
-        Dùng cho điều kiện thắng Poddavki: ai không còn move thì WIN.
+        Determine whether the player still has any legal move (capture or simple).
+        Used for the Poddavki win condition: whoever cannot move wins.
         """
         if self.has_any_capture(player):
             return True
-        for r in range(N):
-            for c in range(N):
-                if self.own(player, r, c):
-                    if self._simple_moves_from(player, (r, c)):
+        for row in range(N):
+            for col in range(N):
+                if self.own(player, row, col):
+                    if self._simple_moves_from(player, (row, col)):
                         return True
         return False
 
@@ -198,11 +204,11 @@ class PodBoard(BaseBoard):
         captured_in_chain: Set[Pos],
     ) -> List[Pos]:
         """
-        Trả về các ô đích hợp lệ cho quân tại pos.
+        Return legal destination squares for the piece at pos.
 
-        - force_captures = True  => chỉ trả captures.
-        - force_captures = False => nếu quân này có capture thì trả captures,
-          nếu không thì trả simple moves.
+        - force_captures = True  => only captures are returned.
+        - force_captures = False => captures are returned if available,
+          otherwise simple moves are returned.
         """
         if not self.own(player, pos[0], pos[1]):
             return []
@@ -217,23 +223,23 @@ class PodBoard(BaseBoard):
 
     def is_capture_move(self, player: int, src: Pos, dst: Pos, captured_in_chain: Set[Pos]):
         """
-        Kiểm tra nước src->dst có phải là nước ăn hợp lệ không,
-        và nếu đúng thì trả về vị trí quân địch bị ăn.
-        (Áp dụng cho cả Man và King, vì đều nhảy đúng 2 ô.)
+        Check whether the move src->dst is a valid capture,
+        returning the enemy position if it is.
+        (Applies to both men and kings since both jump exactly 2 squares.)
         """
-        sr, sc = src
-        dr, dc = dst
+        src_row, src_col = src
+        dst_row, dst_col = dst
 
-        # Capture phải đúng 2 ô chéo
-        if abs(sr - dr) != 2 or abs(sc - dc) != 2:
+        # Captures must be exactly two diagonal squares
+        if abs(src_row - dst_row) != 2 or abs(src_col - dst_col) != 2:
             return False, None
 
-        mr = (sr + dr) // 2
-        mc = (sc + dc) // 2
+        mid_row = (src_row + dst_row) // 2
+        mid_col = (src_col + dst_col) // 2
 
-        if not self.enemy(player, mr, mc):
+        if not self.enemy(player, mid_row, mid_col):
             return False, None
-        if (mr, mc) in captured_in_chain:
+        if (mid_row, mid_col) in captured_in_chain:
             return False, None
 
-        return True, (mr, mc)
+        return True, (mid_row, mid_col)

@@ -48,7 +48,7 @@ class StartMenu:
         self.camp_rule = settings.ENFORCE_CAMP_RULE
 
         # UI state
-        self.mode_select = False  # False = main, True = chọn mode
+        self.mode_select = False  # False = main screen, True = choosing opponent
 
         # colors
         self.bg     = (20, 35, 90)
@@ -99,7 +99,7 @@ class StartMenu:
         self.screen.fill(self.bg)
 
         # card
-        card_rect = pygame.Rect(self.W//2 - 280, 20, 560, self.H - 40)  # ăn theo chiều cao cửa sổ
+        card_rect = pygame.Rect(self.W//2 - 280, 20, 560, self.H - 40)  # stretches to match window height
         pygame.draw.rect(self.screen, self.card, card_rect, border_radius=20)
 
         # title

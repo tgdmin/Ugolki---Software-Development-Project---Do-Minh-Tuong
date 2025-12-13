@@ -4,7 +4,7 @@ import settings
 
 
 class PodStartMenu:  
-    #Start menu cho Poddavki:
+    # Start menu for Poddavki
     def __init__(self, width, height):
         pygame.init()
         self.W, self.H = width, height
@@ -48,7 +48,7 @@ class PodStartMenu:
 
         # UI state
         self.show_rules = False
-        self.mode_select = False  # False = main, True = chọn mode
+        self.mode_select = False  # False = main screen, True = choosing opponent
 
         # colors
         self.bg = (20, 35, 90)
