@@ -125,7 +125,6 @@ class Game:
                 self._finish_bot_turn()
                 return
 
-
     def _bot_move_piece(self, src: Pos, dst: Pos):
         sr, sc = src
         dr, dc = dst

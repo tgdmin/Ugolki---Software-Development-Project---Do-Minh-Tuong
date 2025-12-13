@@ -69,7 +69,7 @@ class StartMenu:
             except Exception as e:
                 print("Could not load logo:", e)
                 self.logo = None
-
+            
         # rule text
         self.rules_lines = [
             "UGOLKI — Rules (quick):",

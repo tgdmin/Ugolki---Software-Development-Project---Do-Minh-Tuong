@@ -1,20 +1,20 @@
 # board.py
-from typing import List, Tuple, Optional, Set
+from typing import Tuple, Optional, Set
 from settings import (
     N, EMPTY, P1, P2,
     P1_START_ROWS, P1_START_COLS,
     P2_START_ROWS, P2_START_COLS,
     PLAYER_TARGETS, ENFORCE_CAMP_RULE
 )
+from base_board import BaseBoard, Pos
 
-Pos = Tuple[int, int]
 DIRS = [(-1, 0), (1, 0), (0, -1), (0, 1)]  # up, down, left, right
 
 
-class Board:
-    # board + rules
+class Board(BaseBoard):
+    # board + rules for Ugolki
     def __init__(self):
-        self.grid: List[List[int]] = [[EMPTY for _ in range(N)] for _ in range(N)]
+        super().__init__()
 
         # P1 bottom-left
         for r in P1_START_ROWS:
@@ -25,19 +25,6 @@ class Board:
         for r in P2_START_ROWS:
             for c in P2_START_COLS:
                 self.grid[r][c] = P2
-
-    # helpers
-    def in_bounds(self, r, c):
-        return 0 <= r < N and 0 <= c < N
-
-    def get(self, r, c):
-        return self.grid[r][c]
-
-    def set(self, r, c, v):
-        self.grid[r][c] = v
-
-    def is_empty(self, r, c):
-        return self.grid[r][c] == EMPTY
 
     # camps
     def _camp_cells(self, player) -> Set[Pos]:
@@ -58,7 +45,13 @@ class Board:
         return out
 
     # multi-jump with live pruning
-    def _jump_landings(self, start: Pos, player: int, forbid: Optional[Set[Pos]], camp_cells: Optional[Set[Pos]],) -> Set[Pos]:
+    def _jump_landings(
+        self,
+        start: Pos,
+        player: int,
+        forbid: Optional[Set[Pos]],
+        camp_cells: Optional[Set[Pos]],
+    ) -> Set[Pos]:
         """
         collect all landings reachable by chaining jumps.
         - forbid: cells we can't land on (visited in current chain)
@@ -110,6 +103,7 @@ class Board:
                     dfs(landing, next_must_stay)
 
         # start: we haven't "entered camp" yet unless start is already in camp
+        camp_cells = self._camp_cells(player) if ENFORCE_CAMP_RULE else None
         start_must_stay = ENFORCE_CAMP_RULE and (camp_cells is not None) and (start in camp_cells)
         dfs(start, start_must_stay)
         return result
