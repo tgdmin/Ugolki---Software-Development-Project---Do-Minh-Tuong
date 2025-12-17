@@ -16,6 +16,11 @@ class Board(BaseBoard):
     def __init__(self):
         super().__init__()
 
+        self._camp_cache = {
+            player: {(row, col) for row in rows for col in cols}
+            for player, (rows, cols) in PLAYER_TARGETS.items()
+        }
+
         # P1 bottom-left
         for row in P1_START_ROWS:
             for col in P1_START_COLS:
@@ -28,8 +33,7 @@ class Board(BaseBoard):
 
     # camps
     def _camp_cells(self, player) -> Set[Pos]:
-        rows, cols = PLAYER_TARGETS[player]
-        return {(row, col) for row in rows for col in cols}
+        return self._camp_cache[player]
 
     def in_target_camp(self, player, row, col):
         return (row, col) in self._camp_cells(player)

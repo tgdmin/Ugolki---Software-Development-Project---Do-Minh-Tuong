@@ -1,8 +1,9 @@
-# pod_game.py
+# poddavki/game.py
 from typing import Optional, Tuple, Set, List
 import pygame
-from pod_board import PodBoard, Pos
-from pod_bot import PodBot
+import settings
+from .board import PodBoard, Pos
+from .bot import PodBot
 from settings import (
     WIDTH,
     HEIGHT,
@@ -19,8 +20,7 @@ from settings import (
 
 
 class PodGame:
-    def __init__(self, vs_bot: bool = False, bot_difficulty: str = "easy"):
-        pygame.init()
+    def __init__(self, vs_bot: bool = False, bot_difficulty: str = "easy", human_player: int = P1):
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         pygame.display.set_caption("Poddavki")
         self.clock = pygame.time.Clock()
@@ -28,7 +28,13 @@ class PodGame:
         self.vs_bot = vs_bot
         self.bot_difficulty = bot_difficulty
         self.board = PodBoard()
-        self.bot = PodBot(difficulty=bot_difficulty) if vs_bot else None
+        self.human_player = human_player if vs_bot else None
+        self.bot_player = None
+        if self.vs_bot:
+            self.bot_player = P2 if self.human_player == P1 else P1
+            self.bot = PodBot(player=self.bot_player, difficulty=bot_difficulty)
+        else:
+            self.bot = None
         self.selected: Optional[Pos] = None
         self.current_player = P1
         self.winner: Optional[int] = None
@@ -36,11 +42,13 @@ class PodGame:
         # capture-chain state
         self.jump_mode = False
         self.captured_in_chain: Set[Pos] = set()
+        self.forced_capture_sources: Set[Pos] = set()
 
         self._load_assets()
         self.font = pygame.font.SysFont(None, 48)
         self.small_font = pygame.font.SysFont(None, 28)
         self.hint_font = pygame.font.SysFont(None, 22)
+        self._update_forced_capture_sources()
 
     # ---------- assets ----------
     def _load_assets(self):
@@ -51,9 +59,7 @@ class PodGame:
             icon_img = pygame.image.load(ICON_PATH).convert_alpha()
             pygame.display.set_icon(icon_img)
         except pygame.error as e:
-            print("Image load error:", e)
-            pygame.quit()
-            raise SystemExit(1)
+            raise RuntimeError(f"Failed to load Poddavki assets: {e}")
 
         self.board_img = pygame.transform.smoothscale(self.board_img, (WIDTH, HEIGHT))
         scale = 0.75
@@ -67,32 +73,62 @@ class PodGame:
         x, y = pos
         return (y // SQUARE, x // SQUARE)
 
+    def _is_human_turn(self) -> bool:
+        if not self.vs_bot:
+            return True
+        return (self.human_player is not None) and (self.current_player == self.human_player)
+
+    def _capture_sources_for_player(self, player: int) -> Set[Pos]:
+        sources: Set[Pos] = set()
+        for r in range(len(self.board.grid)):
+            for c in range(len(self.board.grid[r])):
+                if self.board.get(r, c) != player:
+                    continue
+                if self.board._captures_from(player, (r, c), set()):
+                    sources.add((r, c))
+        return sources
+
+    def _update_forced_capture_sources(self):
+        if self.winner:
+            self.forced_capture_sources = set()
+            return
+        self.forced_capture_sources = self._capture_sources_for_player(self.current_player)
+
     def _valid_moves_for_selected(self) -> List[Pos]:
         """
-        Capture requirement is evaluated per piece:
-
-        - If already inside a capture chain (jump_mode=True) the piece must keep capturing.
-        - If not yet in a chain:
-            + Check whether the selected piece currently has captures.
-            + If it does, force captures for that specific piece.
-            + Otherwise allow ordinary simple moves.
+        During a turn:
+        - If already mid-chain, captures remain mandatory for that piece.
+        - Otherwise, if ANY piece can capture, only those pieces may move and they must capture.
+        - If no captures exist for the player, fall back to simple moves for the selected piece.
         """
         if not self.selected:
             return []
 
-        captured = self.captured_in_chain if self.jump_mode else set()
-
         if self.jump_mode:
-            force_caps = True
-        else:
-            piece_caps = self.board._captures_from(self.current_player, self.selected, set())
-            force_caps = bool(piece_caps)
+            return self.board.get_valid_moves_for_piece(
+                self.current_player,
+                self.selected,
+                force_captures=True,
+                captured_in_chain=self.captured_in_chain,
+            )
 
+        if self.forced_capture_sources:
+            if self.selected not in self.forced_capture_sources:
+                return []
+            return self.board.get_valid_moves_for_piece(
+                self.current_player,
+                self.selected,
+                force_captures=True,
+                captured_in_chain=set(),
+            )
+
+        piece_caps = self.board._captures_from(self.current_player, self.selected, set())
+        force_caps = bool(piece_caps)
         return self.board.get_valid_moves_for_piece(
             self.current_player,
             self.selected,
             force_captures=force_caps,
-            captured_in_chain=captured,
+            captured_in_chain=set(),
         )
 
     def _end_turn(self):
@@ -106,6 +142,7 @@ class PodGame:
 
         # switch players
         self.current_player = P2 if self.current_player == P1 else P1
+        self._update_forced_capture_sources()
 
         # Poddavki: a player wins if they themselves have no legal moves left
         if not self.board.has_any_move(self.current_player):
@@ -115,9 +152,9 @@ class PodGame:
     def _handle_left_click(self, pos):
         if self.winner:
             # any click after a win goes back to the menu
-            return "menu"
+            return settings.RESTART_MENU
 
-        if self.vs_bot and self.current_player == P2:
+        if not self._is_human_turn():
             return None  # ignore clicks during the bot's turn
 
         row, col = self._screen_to_grid(pos)
@@ -125,6 +162,8 @@ class PodGame:
         # SELECT PIECE
         if self.selected is None:
             if self.board.get(row, col) == self.current_player:
+                if self.forced_capture_sources and (row, col) not in self.forced_capture_sources:
+                    return None
                 self.selected = (row, col)
                 self.jump_mode = False
                 self.captured_in_chain.clear()
@@ -199,7 +238,7 @@ class PodGame:
                     )
 
         # highlight valid moves
-        if self.selected and not self.winner:
+        if self.selected and not self.winner and self._is_human_turn():
             for (move_row, move_col) in self._valid_moves_for_selected():
                 pygame.draw.rect(
                     self.screen,
@@ -219,9 +258,9 @@ class PodGame:
             piece_caps_now = self.board._captures_from(
                 self.current_player, self.selected, set()
             )
-            if self.jump_mode or piece_caps_now:
+            if self.jump_mode or piece_caps_now or self.forced_capture_sources:
                 hint = self.hint_font.render(
-                    "This piece must capture if it can",
+                    "Captures are mandatory when available",
                     True,
                     (255, 255, 255),
                 )
@@ -252,21 +291,21 @@ class PodGame:
         while True:
             for e in pygame.event.get():
                 if e.type == pygame.QUIT:
-                    pygame.quit()
-                    raise SystemExit(0)
+                    return settings.QUIT_GAME
                 elif e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE:
-                    return "menu"
+                    return settings.RESTART_MENU
                 elif e.type == pygame.MOUSEBUTTONDOWN:
                     res = self.handle_mouse(e)
-                    if res == "menu":
-                        return "menu"
+                    if res == settings.RESTART_MENU:
+                        return settings.RESTART_MENU
 
             # let the bot act automatically on its turn
             if (
                 self.vs_bot
                 and self.bot
                 and not self.winner
-                and self.current_player == P2
+                and self.bot_player is not None
+                and self.current_player == self.bot_player
             ):
                 self.bot.take_turn(self)
 

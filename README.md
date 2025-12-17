@@ -9,6 +9,28 @@ the destination square is adjacent to the starting square
 the destination square can be reached by consecutive "jumps" over other game pieces belonging to either player.
 The game ends when both players have no available moves left. Game pieces are counted within the square bounds of the final formation, and the player with more pieces wins.
 ---------------
+## Getting Started
+
+### Requirements
+- Python 3.10+ recommended
+- `pygame` (install via `pip install pygame`)
+
+### Running the games
+1. (Optional) Create and activate a virtual environment:
+   ```
+   python3 -m venv .venv
+   source .venv/bin/activate  # Windows: .venv\Scripts\activate
+   ```
+2. Install dependencies:
+   ```
+   pip install pygame
+   ```
+3. Launch the game selector:
+   ```
+   python3 main.py
+   ```
+4. Choose Ugolki or Poddavki, configure mode (vs player/bot, side, rules), and play.
+---------------
 * Materials:
     + Board.png : The graphic of the board
     + WP.png : Player 1 pieces

@@ -2,7 +2,8 @@
 from typing import Optional, Tuple, Set, List
 import random
 import pygame
-from board import Board
+from .board import Board
+import settings
 from settings import (
     WIDTH, HEIGHT, FPS, SQUARE, EMPTY, P1, P2,
     BOARD_IMG_PATH, WP_IMG_PATH, BP_IMG_PATH,
@@ -13,13 +14,16 @@ Pos = Tuple[int, int]
 
 class Game:
     # supports Vs Bot or Vs Player 2
-    def __init__(self, vs_bot: bool = True):
-        pygame.init()
+    def __init__(self, vs_bot: bool = True, human_player: int = P1):
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         pygame.display.set_caption(WINDOW_TITLE)
         self.clock = pygame.time.Clock()
 
         self.vs_bot = vs_bot  # True => P2 is bot
+        self.human_player = human_player if vs_bot else None
+        self.bot_player = None
+        if self.vs_bot:
+            self.bot_player = P2 if human_player == P1 else P1
         self.board = Board()
         self.selected: Optional[Pos] = None
         self.current_player = P1
@@ -50,9 +54,7 @@ class Game:
             icon_img = pygame.image.load(ICON_PATH).convert_alpha()
             pygame.display.set_icon(icon_img)
         except pygame.error as e:
-            print("Image load error:", e)
-            pygame.quit()
-            raise SystemExit(1)
+            raise RuntimeError(f"Failed to load game assets: {e}")
 
         self.board_img = pygame.transform.smoothscale(self.board_img, (WIDTH, HEIGHT))
         scale = 0.75
@@ -68,6 +70,12 @@ class Game:
         self.winner = None
         self.jump_mode = False
         self.visited_in_chain.clear()
+
+    def _is_human_turn(self) -> bool:
+        if not self.vs_bot:
+            return True
+        return (self.human_player is not None) and (self.current_player == self.human_player)
+
 
     # helpers
     def _screen_to_grid(self, pos) -> Pos:
@@ -98,21 +106,22 @@ class Game:
 
     # BOT (P2)
     def _bot_take_turn(self):
-        if self.winner or not self.vs_bot or self.current_player != P2:
+        if self.winner or not self.vs_bot or self.bot_player is None or self.current_player != self.bot_player:
             return
 
+        bot = self.bot_player
         # collect P2 pieces 
         pieces: List[Pos] = [
             (row, col)
             for row in range(len(self.board.grid))
             for col in range(len(self.board.grid[row]))
-            if self.board.get(row, col) == P2
+            if self.board.get(row, col) == bot
         ]
         random.shuffle(pieces)
 
         # try jump first (take the first chain we can)
         for pos in pieces:
-            all_moves = self.board.get_valid_moves(P2, pos, force_jumps=False)
+            all_moves = self.board.get_valid_moves(bot, pos, force_jumps=False)
             jump_moves = [m for m in all_moves if abs(m[0] - pos[0]) + abs(m[1] - pos[1]) == 2]
             if jump_moves:
                 self._bot_play_jump_chain(pos, jump_moves[0])
@@ -120,7 +129,7 @@ class Game:
 
         # else do first step we see
         for pos in pieces:
-            all_moves = self.board.get_valid_moves(P2, pos, force_jumps=False)
+            all_moves = self.board.get_valid_moves(bot, pos, force_jumps=False)
             step_moves = [m for m in all_moves if abs(m[0] - pos[0]) + abs(m[1] - pos[1]) == 1]
             if step_moves:
                 self._bot_move_piece(pos, step_moves[0])
@@ -134,13 +143,16 @@ class Game:
         self.board.set(src_row, src_col, EMPTY)
 
     def _bot_play_jump_chain(self, start: Pos, first_dst: Pos):
+        bot = self.bot_player
+        if bot is None:
+            return
         self._bot_move_piece(start, first_dst)
         visited = {start, first_dst}
         cur = first_dst
 
         # keep chaining jumps; always pick the first available
         while True:
-            more = self.board.get_valid_moves(P2, cur, force_jumps=True, forbid_dests=visited)
+            more = self.board.get_valid_moves(bot, cur, force_jumps=True, forbid_dests=visited)
             more = [m for m in more if abs(m[0] - cur[0]) + abs(m[1] - cur[1]) == 2]
             if not more:
                 break
@@ -153,10 +165,16 @@ class Game:
         self._finish_bot_turn()
 
     def _finish_bot_turn(self):
-        if self.board.is_target_camp_filled(P2):
-            self.winner = P2
+        bot = self.bot_player
+        if bot is None:
             return
-        self.current_player = P1
+        if self.board.is_target_camp_filled(bot):
+            self.winner = bot
+            return
+        if self.human_player is not None:
+            self.current_player = self.human_player
+        else:
+            self.current_player = P1 if bot == P2 else P2
     
 
     # input (human)
@@ -166,11 +184,11 @@ class Game:
             if self.btn_replay.collidepoint(mx, my):
                 self._reset_game()
             elif self.btn_menu.collidepoint(mx, my):
-                return "menu"
+                return settings.RESTART_MENU
             return None
 
         # ignore clicks on bot's turn
-        if self.vs_bot and self.current_player == P2:
+        if not self._is_human_turn():
             return None
 
         row, col = self._screen_to_grid(pos)
@@ -215,13 +233,21 @@ class Game:
     def _handle_right_click(self, pos):
         if self.winner:
             return None
-        if self.vs_bot and self.current_player == P2:
+        if not self._is_human_turn():
             return None  # can't interact on bot's turn
         if not self.jump_mode or not self.selected:
             return None
 
         row, col = self._screen_to_grid(pos)
         if (row, col) == self.selected:
+            more = self.board.get_valid_moves(
+                self.current_player,
+                self.selected,
+                force_jumps=True,
+                forbid_dests=self.visited_in_chain if self.visited_in_chain else None
+            )
+            if more:
+                return None
             self._end_turn()
         return None
 
@@ -245,13 +271,13 @@ class Game:
                     self.screen.blit(self.bp_img, (col * SQUARE + self.offset, row * SQUARE + self.offset))
 
         # highlights for the human turn
-        if self.selected and not self.winner and (not self.vs_bot or self.current_player == P1):
+        if self.selected and not self.winner and self._is_human_turn():
             for move_row, move_col in self._valid_moves_for_selected():
                 pygame.draw.rect(self.screen, (0, 255, 0), (move_col * SQUARE, move_row * SQUARE, SQUARE, SQUARE), 5)
             sel_row, sel_col = self.selected
             pygame.draw.rect(self.screen, (255, 255, 0), (sel_col * SQUARE, sel_row * SQUARE, SQUARE, SQUARE), 5)
             if self.jump_mode:
-                hint = self.hint_font.render("Right-click current piece to stop jumping", True, (255, 255, 255))
+                hint = self.hint_font.render("Finish chain: right-click when no jumps remain", True, (255, 255, 255))
                 bg = hint.get_rect()
                 bg.topleft = (10, 10)
                 pad = 8
@@ -278,21 +304,19 @@ class Game:
         while True:
             for e in pygame.event.get():
                 if e.type == pygame.QUIT:
-                    pygame.quit()
-                    raise SystemExit(0)
+                    return settings.QUIT_GAME
                 elif e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE:
                     if self.winner:
-                        return "menu"
+                        return settings.RESTART_MENU
                     else:
-                        pygame.quit()
-                        raise SystemExit(0)
+                        return settings.QUIT_GAME
                 elif e.type == pygame.MOUSEBUTTONDOWN:
                     res = self.handle_mouse(e)
-                    if res == "menu":
-                        return "menu"
+                    if res == settings.RESTART_MENU:
+                        return settings.RESTART_MENU
 
             # let bot play automatically when it's its turn
-            if self.vs_bot and not self.winner and self.current_player == P2:
+            if self.vs_bot and not self.winner and self.bot_player is not None and self.current_player == self.bot_player:
                 self._bot_take_turn()
 
             self.draw()

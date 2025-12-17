@@ -33,3 +33,13 @@ BP_IMG_PATH = "assets/BP.png"
 WINDOW_TITLE = "Ugolki - Software Development Project - Do Minh Tuong"
 ICON_PATH = BP_IMG_PATH
 LOGO_PATH = "assets/logo.png"
+
+# UI layout constants
+BUTTON_HEIGHT = 56
+BUTTON_SPACING = 20
+BORDER_RADIUS = 12
+FOOTER_PADDING = 8
+
+# game flow signals
+RESTART_MENU = "restart_menu"
+QUIT_GAME = "quit_game"
