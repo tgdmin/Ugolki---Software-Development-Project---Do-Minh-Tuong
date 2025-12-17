@@ -42,7 +42,8 @@ if __name__ == "__main__":
                 continue
 
             vs_bot = bool(opts.get("vs_bot", False))  
-            game = PodGame(vs_bot=vs_bot)
+            bot_diff = opts.get("bot_difficulty", "easy")
+            game = PodGame(vs_bot=vs_bot, bot_difficulty=bot_diff)
             result = game.run()
             if result == "menu":
                 continue

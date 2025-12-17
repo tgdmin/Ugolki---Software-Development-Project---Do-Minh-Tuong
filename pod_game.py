@@ -19,15 +19,16 @@ from settings import (
 
 
 class PodGame:
-    def __init__(self, vs_bot: bool = False):
+    def __init__(self, vs_bot: bool = False, bot_difficulty: str = "easy"):
         pygame.init()
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         pygame.display.set_caption("Poddavki")
         self.clock = pygame.time.Clock()
 
         self.vs_bot = vs_bot
+        self.bot_difficulty = bot_difficulty
         self.board = PodBoard()
-        self.bot = PodBot()
+        self.bot = PodBot(difficulty=bot_difficulty) if vs_bot else None
         self.selected: Optional[Pos] = None
         self.current_player = P1
         self.winner: Optional[int] = None
@@ -261,7 +262,12 @@ class PodGame:
                         return "menu"
 
             # let the bot act automatically on its turn
-            if self.vs_bot and not self.winner and self.current_player == P2:
+            if (
+                self.vs_bot
+                and self.bot
+                and not self.winner
+                and self.current_player == P2
+            ):
                 self.bot.take_turn(self)
 
             self.draw()

@@ -31,6 +31,11 @@ class PodStartMenu:
         self.btn_vs_p2 = pygame.Rect(mcx, self.H // 2 - 40, mbw, mbh)
         self.btn_vs_bot = pygame.Rect(mcx, self.H // 2 + 40, mbw, mbh)
 
+        # BOT DIFFICULTY buttons
+        self.btn_bot_easy = pygame.Rect(mcx, self.H // 2 - 40, mbw, mbh)
+        self.btn_bot_hard = pygame.Rect(mcx, self.H // 2 + 40, mbw, mbh)
+        self.btn_bot_back = pygame.Rect(self.W // 2 - 80, self.H // 2 + 150, 160, 44)
+
         # RULES overlay
         card_w, card_h = 560, 420
         self.rules_rect = pygame.Rect(
@@ -49,6 +54,7 @@ class PodStartMenu:
         # UI state
         self.show_rules = False
         self.mode_select = False  # False = main screen, True = choosing opponent
+        self.bot_difficulty_menu = False
 
         # colors
         self.bg = (20, 35, 90)
@@ -121,6 +127,23 @@ class PodStartMenu:
 
         self.draw_footer()
 
+    def draw_bot_difficulty(self):
+        self.screen.fill(self.bg)
+        card_rect = pygame.Rect(self.W // 2 - 320, self.H // 2 - 200, 640, 400)
+        pygame.draw.rect(self.screen, self.card, card_rect, border_radius=20)
+
+        title = self.title_font.render("Bot Difficulty", True, (255, 255, 255))
+        self.screen.blit(title, title.get_rect(center=(self.W // 2, card_rect.top + 60)))
+
+        self.draw_btn(self.btn_bot_easy, "Easy")
+        self.draw_btn(self.btn_bot_hard, "Hard")
+
+        pygame.draw.rect(self.screen, self.btncol, self.btn_bot_back, border_radius=12)
+        txt = self.ui_font.render("Back", True, self.btn_text)
+        self.screen.blit(txt, txt.get_rect(center=self.btn_bot_back.center))
+
+        self.draw_footer()
+
     def draw_rules(self):
         dim = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
         dim.fill(self.overlay)
@@ -158,7 +181,11 @@ class PodStartMenu:
                     if self.show_rules:
                         self.show_rules = False
                     elif self.mode_select:
-                        self.mode_select = False
+                        if self.bot_difficulty_menu:
+                            self.bot_difficulty_menu = False
+                        else:
+                            self.mode_select = False
+                            self.bot_difficulty_menu = False
                     else:
                         return None
 
@@ -171,17 +198,28 @@ class PodStartMenu:
                             self.show_rules = False
                         continue
 
+                    # bot difficulty selection
+                    if self.mode_select and self.bot_difficulty_menu:
+                        if self.btn_bot_easy.collidepoint(mx, my):
+                            return {"vs_bot": True, "bot_difficulty": "easy"}
+                        if self.btn_bot_hard.collidepoint(mx, my):
+                            return {"vs_bot": True, "bot_difficulty": "hard"}
+                        if self.btn_bot_back.collidepoint(mx, my):
+                            self.bot_difficulty_menu = False
+                        continue
+
                     # mode screen
                     if self.mode_select:
                         if self.btn_vs_p2.collidepoint(mx, my):
                             return {"vs_bot": False}
                         if self.btn_vs_bot.collidepoint(mx, my):
-                            return {"vs_bot": True}
+                            self.bot_difficulty_menu = True
                         continue
 
                     # main screen
                     if self.btn_play.collidepoint(mx, my):
                         self.mode_select = True
+                        self.bot_difficulty_menu = False
                     elif self.btn_rules.collidepoint(mx, my):
                         self.show_rules = True
                     elif self.btn_quit.collidepoint(mx, my):
@@ -193,7 +231,10 @@ class PodStartMenu:
                 self.draw_rules()
             else:
                 if self.mode_select:
-                    self.draw_mode()
+                    if self.bot_difficulty_menu:
+                        self.draw_bot_difficulty()
+                    else:
+                        self.draw_mode()
                 else:
                     self.draw_main()
 
